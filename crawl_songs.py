@@ -280,8 +280,42 @@ class SongCrawler:
             # 失败不更新缓存时间
             return []
     
-    def crawl_all_songs(self, singers_file="singers_33ve.json", limit=None):
-        """爬取所有歌手的歌曲"""
+    def _merge_songs_into_file(self, songs_to_merge, filename="songs_33ve.json"):
+        """将传入的歌曲列表合并写入到指定文件，按 id 去重并更新统计"""
+        try:
+            dest = Path(filename)
+            existing = []
+            if dest.exists():
+                with open(dest, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+                existing = data.get('songs', [])
+            # 合并去重
+            def sk(s):
+                return s.get('id') or f"{s.get('singer_name')}::{s.get('title')}"
+            id2song = {sk(s): s for s in existing}
+            for s in songs_to_merge:
+                id2song[sk(s)] = s
+            final_songs = list(id2song.values())
+            # 统计
+            singer_stats = {}
+            for s in final_songs:
+                n = s.get('singer_name', '未知')
+                singer_stats[n] = singer_stats.get(n, 0) + 1
+            out = {
+                'total_songs': len(final_songs),
+                'total_singers': len(singer_stats),
+                'crawl_time': time.strftime('%Y-%m-%d %H:%M:%S'),
+                'singer_stats': singer_stats,
+                'songs': final_songs
+            }
+            with open(dest, 'w', encoding='utf-8') as f:
+                json.dump(out, f, ensure_ascii=False, indent=2)
+            logger.info(f"已增量合并写入 {len(songs_to_merge)} 首到 {filename}，总计 {len(final_songs)} 首")
+        except Exception as e:
+            logger.error(f"增量合并写入失败: {e}")
+
+    def crawl_all_songs(self, singers_file="singers_33ve.json", limit=None, output_file=None):
+        """爬取歌手歌曲。若提供 output_file，将在每个歌手完成后增量落盘该文件。"""
         logger.info("开始爬取所有歌手的歌曲...")
         
         # 读取歌手数据
@@ -310,6 +344,9 @@ class SongCrawler:
                     result = future.result()
                     completed += 1
                     logger.info(f"进度: {completed}/{len(singers)} - 完成歌手: {singer['name']}")
+                    # 增量写入
+                    if output_file and result:
+                        self._merge_songs_into_file(result, filename=output_file)
                 except Exception as e:
                     logger.error(f"处理歌手 {singer['name']} 时出错: {e}")
         

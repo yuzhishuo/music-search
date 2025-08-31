@@ -178,22 +178,67 @@ class InteractiveCrawler:
             print(f"❌ 合并歌曲到 {main_file} 失败: {e}")
             return None
 
-    def crawl_singer_by_name(self, singer_name: str) -> Optional[str]:
-        """根据名称搜索并爬取该歌手的歌曲，合并进 songs 文件。返回确认的歌手名或 None"""
+    def crawl_singer_by_name(self, singer_name: str, interactive: bool = True) -> Optional[str]:
+        """根据名称搜索并爬取该歌手的歌曲，合并进 songs 文件。返回确认的歌手名或 None。
+        interactive=False 时自动选择最佳匹配（精确命中优先，其次第一项），不弹出交互选择。
+        若本地 singer 列表无匹配，会先按名称关键词增量爬取歌手列表并合并至 singers_33ve.json。
+        """
         try:
-            matches = self.search_singers(query=singer_name.strip())
+            name_key = singer_name.strip()
+            def ensure_singer_in_list() -> List[Dict]:
+                matches_local = self.search_singers(query=name_key)
+                if matches_local:
+                    return matches_local
+                # 本地未命中：按名称关键词增量爬取歌手列表并合并
+                try:
+                    from crawl_singers import SingerCrawler
+                    crawler = SingerCrawler()
+                    crawler.crawl_all_singers(name_filter=name_key)
+                    # 合并到 singers_33ve.json
+                    singers_file = Path("singers_33ve.json")
+                    existing = {}
+                    if singers_file.exists():
+                        with open(singers_file, 'r', encoding='utf-8') as f:
+                            existing = json.load(f)
+                    exist_list = existing.get('singers', []) if existing else []
+                    id_set = {s.get('id') for s in exist_list}
+                    for s in crawler.singers_data:
+                        if s.get('id') not in id_set:
+                            exist_list.append(s)
+                            id_set.add(s.get('id'))
+                    merged = {
+                        'total_singers': len(exist_list),
+                        'crawl_time': time.strftime('%Y-%m-%d %H:%M:%S'),
+                        'singers': exist_list
+                    }
+                    with open(singers_file, 'w', encoding='utf-8') as f:
+                        json.dump(merged, f, ensure_ascii=False, indent=2)
+                    # 重新加载内存中的 singer 列表
+                    self.load_singers_data()
+                except Exception as e:
+                    print(f"❌ 增量爬取歌手列表失败: {e}")
+                return self.search_singers(query=name_key)
+
+            matches = ensure_singer_in_list()
             if not matches:
-                print(f"❌ 未找到包含关键词 '{singer_name}' 的歌手")
+                print(f"❌ 未找到包含关键词 '{name_key}' 的歌手")
                 return None
-            self.display_singers(matches, title=f"搜索 '{singer_name}' 的结果")
-            selected_singer = self.select_singer(matches)
-            if not selected_singer:
-                print("❌ 未选择歌手")
-                return None
+
+            if interactive:
+                self.display_singers(matches, title=f"搜索 '{name_key}' 的结果")
+                selected_singer = self.select_singer(matches)
+                if not selected_singer:
+                    print("❌ 未选择歌手")
+                    return None
+            else:
+                # 自动选择：精确名称优先，否则取第一项
+                exact = [m for m in matches if m.get('name') == name_key]
+                selected_singer = exact[0] if exact else matches[0]
+
             print(f"\n✅ 已选择歌手: {selected_singer['name']}")
-            # 使用默认设置（是否使用代理交由爬虫内部与代理池配置决定；安全模式受配置控制）
-            max_workers = 3
-            use_proxy = True
+            # 使用配置
+            use_proxy = bool(PROXY_ENABLED)
+            max_workers = int(CRAWLER_MAX_WORKERS) if str(CRAWLER_MAX_WORKERS).isdigit() else 3
             temp_singers_file = "temp_singer.json"
             temp_data = {
                 'total_singers': 1,
@@ -203,8 +248,11 @@ class InteractiveCrawler:
                 json.dump(temp_data, f, ensure_ascii=False, indent=2)
             try:
                 crawler = SongCrawler(max_workers=max_workers, use_proxy=use_proxy)
-                crawler.crawl_all_songs(temp_singers_file, limit=1)
-                self._merge_songs_into_main_file(crawler.songs_data, "songs_33ve.json")
+                # 每个歌手单独爬取，直接合并落盘
+                crawler.crawl_all_songs(temp_singers_file, limit=1, output_file="songs_33ve.json")
+                if crawler.songs_data:
+                    # 再次合并确保一致
+                    self._merge_songs_into_main_file(crawler.songs_data, "songs_33ve.json")
                 print(f"✅ 已更新歌曲库，新增/更新 {len(crawler.songs_data)} 首: {selected_singer['name']}")
                 return selected_singer['name']
             finally:
@@ -417,7 +465,7 @@ class InteractiveCrawler:
             if len(singer_names) > max_show_singers:
                 print(f"... 共 {len(singer_names)} 位歌手，已只显示前 {max_show_singers} 位")
             singer_sel = input("歌手选择（可输入歌手名触发自动爬取）: ").strip()
-            # 解析选择：数字/区间 -> 按索引；其他文本 -> 作为歌手名先爬取
+            # 解析选择：数字/区间 -> 按索引；其他文本 -> 作为歌手名先爬取并合并后立刻可下载
             tokens = [t.strip() for t in singer_sel.split(',') if t.strip()]
             numeric_part = []
             name_part = []
@@ -430,7 +478,7 @@ class InteractiveCrawler:
             # 对非数字输入先执行按名爬取
             added_names = []
             for name_token in name_part:
-                added = self.crawl_singer_by_name(name_token)
+                added = self.crawl_singer_by_name(name_token, interactive=False)
                 if added:
                     added_names.append(added)
             # 重新载入所有歌曲并刷新歌手列表（以包含新爬取的歌手）
@@ -440,11 +488,19 @@ class InteractiveCrawler:
                 all_songs = songs_data.get('songs', [])
                 singer_names = sorted({s.get('singer_name') for s in all_songs if s.get('singer_name')})
                 max_show_singers = min(len(singer_names), 200)
-            selected_singers = [singer_names[i-1] for i in sorted(singer_idx)] if singer_idx else singer_names
-            # 若通过名称新增的歌手在列表中，确保加入选择集
-            for nm in added_names:
-                if nm in singer_names and nm not in selected_singers:
-                    selected_singers.append(nm)
+            # 生成最终的歌手选择：
+            # - 若有编号选择，则以编号为主
+            # - 若没有编号但有名称输入，则仅按名称选择
+            # - 若二者都没有（直接回车/all），则选择全部
+            selected_singers = []
+            if singer_idx:
+                selected_singers = [singer_names[i-1] for i in sorted(singer_idx)]
+            if added_names:
+                for nm in added_names:
+                    if nm in singer_names and nm not in selected_singers:
+                        selected_singers.append(nm)
+            if not selected_singers:
+                selected_singers = singer_names
             final_songs = [s for s in all_songs if s.get('singer_name') in selected_singers]
             # 使用与下载器一致的本地缓存过滤已下载
             downloader = SongDownloader(download_dir=custom_dir or DOWNLOAD_DIR, max_workers=max_workers, overwrite_existing=False)

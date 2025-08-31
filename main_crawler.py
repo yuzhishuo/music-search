@@ -108,9 +108,9 @@ class MusicCrawlerManager:
                 source_file = self.singers_file
         
         crawler = SongCrawler(max_workers=max_workers, use_proxy=use_proxy)
-        # 传入筛选后的文件；歌曲端不再使用limit（已通过歌手侧裁剪）
-        crawler.crawl_all_songs(source_file, limit=None)
-        # 合并写入而非覆盖
+        # 传入筛选后的文件；在每个歌手完成后增量落盘
+        crawler.crawl_all_songs(source_file, limit=None, output_file=self.songs_file)
+        # 额外保障：最终再合并一次（处理并发期间遗漏）
         merged_total = self._merge_songs_into_file(crawler.songs_data)
         # 清理临时文件
         if temp_file and Path(temp_file).exists():
