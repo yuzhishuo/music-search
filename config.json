@@ -1,6 +1,6 @@
 {
     "download_dir": "/Volumes/share/docker/Navidrome/music",
-    "download_limit": 1,
+    "download_limit": 50,
     "download_max_workers": 3,
     "safe_mode_enabled": true
 }
