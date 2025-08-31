@@ -1,0 +1,29 @@
+# OS
+.DS_Store
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+.Python
+*.egg-info/
+.venv/
+venv/
+
+# Editors/IDE
+.idea/
+.vscode/
+
+# Project outputs & caches
+music_downloads/
+downloaded_cache.json
+crawl_cache.json
+temp_*.json
+temp_singers_filtered.json
+working_proxies.json
+
+# Logs
+*.log
+
