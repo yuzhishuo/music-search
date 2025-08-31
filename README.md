@@ -1,5 +1,9 @@
 # 33ve音乐网站爬虫系统
 
+<!-- DAILY_STATUS_START -->
+![Daily Test](https://img.shields.io/badge/daily%20test-passed-brightgreen)
+<!-- DAILY_STATUS_END -->
+
 一个功能完整的音乐网站爬虫系统，支持歌手信息爬取、歌曲信息获取和音乐文件下载。
 
 ## 🚀 功能特性

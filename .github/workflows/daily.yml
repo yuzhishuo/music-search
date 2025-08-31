@@ -1,0 +1,61 @@
+name: Daily CI
+
+on:
+  schedule:
+    # 每天凌晨（UTC）运行一次。如需北京时间凌晨，请改为 '0 16 * * *'
+    - cron: '0 0 * * *'
+  workflow_dispatch:
+
+jobs:
+  daily-check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run daily crawler smoke test
+        id: daily
+        continue-on-error: true
+        shell: bash
+        run: |
+          set +e
+          # 轻量测试：先保证有少量歌手数据，再按名称爬取少量歌曲（不使用代理、单线程）
+          python main_crawler.py --mode singers --singer-name "周" --limit-singers 1
+          python main_crawler.py --mode songs --singer-name "周" --limit-singers 1 --max-workers 1 --no-proxy
+          EXIT_CODE=$?
+          if [ $EXIT_CODE -eq 0 ]; then
+            echo "status=success" >> $GITHUB_OUTPUT
+            exit 0
+          else
+            echo "status=failure" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+      - name: Update README status section
+        run: |
+          python scripts/update_readme_status.py "${{ steps.daily.outputs.status }}"
+
+      - name: Commit and push changes
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add README.md
+          if git diff --cached --quiet; then
+            echo "No README changes"
+          else
+            git commit -m "chore(ci): 更新日常测试状态 [skip ci]"
+            git push
+          fi
+
+
