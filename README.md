@@ -170,25 +170,22 @@ python interactive_crawler.py
 }
 ```
 
-### 截图（示意）
 
-将你的截图放置到 `docs/images/` 目录，README 会自动引用（以下为占位路径，可按需命名）：
+### 界面截图
 
-- 主菜单：`docs/images/interactive_menu.png`
-- 下载模式选择：`docs/images/download_mode_select.png`
-- 歌手选择页：`docs/images/singer_select.png`
-- 歌曲选择页：`docs/images/song_select.png`
-- 下载进度（含已存在文件跳过）：`docs/images/download_progress.png`
+下列截图演示交互式下载的主要步骤：
 
-Markdown 引用示例：
+- 主菜单：进入后提供状态、搜索、爬取、下载等功能入口。
 
-```md
-![主菜单](docs/images/interactive_menu.png)
-![下载模式选择](docs/images/download_mode_select.png)
-![歌手选择页](docs/images/singer_select.png)
-![歌曲选择页](docs/images/song_select.png)
-![下载进度](docs/images/download_progress.png)
-```
+  ![主菜单](docs/images/interactive_menu.png)
+
+- 下载模式选择：可选择“按歌手下载”或“按歌曲下载”。
+
+  ![下载模式选择](docs/images/download_mode_select.png)
+
+- 下载进度：下载过程中的总体进度与单文件进度展示，已存在文件会自动跳过。
+
+  ![下载进度](docs/images/download_progress.png)
 
 # 查看数据统计
 python main_crawler.py --mode stats
